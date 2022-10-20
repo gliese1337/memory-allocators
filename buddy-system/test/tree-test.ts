@@ -2,7 +2,7 @@ import 'mocha';
 import { expect } from 'chai';
 import { 
   alloc_level, getf, merge, resize_block,
-} from '../src/allocator';
+} from '../src/lib';
 
 function s2u(a: string[]) {
   return new Uint8Array(a.map(a => parseInt(a, 2)));
@@ -112,7 +112,7 @@ describe("Tree Manipulation Tests", () => {
   });
 
   it("should free the second level-2 block when both of its children are free, starting from the left child", () => {
-    const tab = s2u(["01010001","00000001","01000000","00000010","10000000","00000000","00000000","00000000"]);
+    const tab = s2u(["01010001","00000001","01000000","00000010","10100000","00000000","00000000","00000000"]);
     const res = s2u(["01010001","00000001","00000000","00000010","10000000","00000000","00000000","00000000"]);
     console.log(tree2sexpr(tab, 64));
     merge(17, tab);
@@ -121,7 +121,7 @@ describe("Tree Manipulation Tests", () => {
   });
 
   it("should free the second level-2 block when both of its children are free, starting from the right child", () => {
-    const tab = s2u(["01010001","00000001","01000000","00000010","10000000","00000000","00000000","00000000"]);
+    const tab = s2u(["01010001","00000001","01000000","00000010","10001000","00000000","00000000","00000000"]);
     const res = s2u(["01010001","00000001","00000000","00000010","10000000","00000000","00000000","00000000"]);
     console.log(tree2sexpr(tab, 64));
     merge(18, tab);

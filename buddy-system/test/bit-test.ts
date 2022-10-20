@@ -4,7 +4,7 @@ import {
   nextPow2,
   getf, togf, seta, clra, setc, clrc,
   sstr, prnt, left,
-} from '../src/allocator';
+} from '../src/lib';
 
 describe("Helper Function Tests", () => {
   it("should find the next power of 2", () => {
