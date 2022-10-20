@@ -6,37 +6,37 @@ export function nextPow2(n: number) {
 
 // Get a two-bit field at index i
 export function getf(m: Uint8Array, i: number) {
-  return (m[i>>2] >> (6 - 2*(i&3))) & 3;
+  return (m[i>>2] >> (6 - ((i&3) << 1))) & 3;
 }
 
 // Toggle bits of field at index i
 export function togf(m: Uint8Array, i: number) {
   const b = i >> 2;
-  m[b] = (m[b] ^ (0xC0 >> (2*(i&3))));
+  m[b] = (m[b] ^ (0xC0 >> ((i&3) << 1)));
 }
 
 // Set the block allocation bit of field i
 export function seta(m: Uint8Array, i: number) {
   const b = i >> 2;
-  m[b] = (m[b] | (0x80 >> (6 - 2*(i&3))));
+  m[b] = (m[b] | (0x80 >> ((i&3) << 1)));
 }
 
 // Clear the block allocation bit of field i
 export function clra(m: Uint8Array, i: number) {
   const b = i >> 2;
-  m[b] = (m[b] & ~(0x80 >> (6 - 2*(i&3))));
+  m[b] = (m[b] & ~(0x80 >> ((i&3) << 1)));
 }
 
 // Set the child allocation bit of field i
 export function setc(m: Uint8Array, i: number) {
   const b = i >> 2;
-  m[b] = (m[b] | (0x40 >> (6 - 2*(i&3))));
+  m[b] = (m[b] | (0x40 >> ((i&3) << 1)));
 }
 
 // Clear the child allocation bit of field i
 export function clrc(m: Uint8Array, i: number) {
   const b = i >> 2;
-  m[b] = (m[b] & ~(0x40 >> (6 - 2*(i&3))));
+  m[b] = (m[b] & ~(0x40 >> ((i&3) << 1)));
 }
 
 // Get the sibling index
@@ -54,37 +54,34 @@ export function alloc_level(tree_level: number, block_size: number, table: Uint8
 
   // Check for free blocks on this level whose
   // sisters are allocated and use them first.
-  const level_length = 1 << tree_level;
-  const level_start = level_length - 1;
-  // Iterate by twos, over pairs of sisters.
-  for (let k = 0; k < level_length; k += 2) {
-    const l = k + level_start;
+  const llen = 1 << tree_level;
+  const lend = (llen << 1) - 1;
+  for (let l = llen - 1; l < lend; l+=2) {
     const r = l + 1;
     const lbits = getf(table, l);
     const rbits = getf(table, r);
-    
     // Because a sister has already been allocated in each of
     // these cases, we do not need to update the parent metadata.
     if (lbits === 0 && rbits !== 0) {
       seta(table, l); // allocate the left sister
-      return block_size * k;
+      return block_size * (l - llen + 1);
     }
     if (lbits !== 0 && rbits === 0) {
       seta(table, r); // allocate the right sister
-      return block_size * (k + 1);
+      return block_size * (r - llen + 1);
     }
   }
 
   // If we couldn't find any sister blocks to return,
   // allocate a block one level up to split.
-  const nblok_size = block_size * 2;
+  const nblok_size = block_size << 1;
   const p: number = alloc_level(tree_level - 1, nblok_size, table);
   
   // Convert pointer back to a table index.
   // Find the start index of the parent level
   // and add the block index within that level.
   const block_index = p / nblok_size;
-  const pi = ((level_length >> 1) - 1) + block_index;
+  const pi = ((llen >> 1) - 1) + block_index;
   
   // Toggle bits to indicate this block was not actually allocated,
   // but its left child (which is aligned on p) was allocated.
@@ -103,6 +100,44 @@ export function merge(i: number, table: Uint8Array) {
     clrc(table, i); // turn off 'allocated child' bit
     // continue merging while sister is also free
   } while (getf(table, sstr(i)) === 0);
+}
+
+export function resize_block(i: number, old_size: number, s: number, minblock: number, table: Uint8Array) {
+  if (s < old_size/2 && s > minblock) {
+    // toggle this block from self-allocated to child-allocated
+    togf(table, i);
+    // allocate the aligned left child
+    seta(table, left(i));
+    return true;
+  }
+  
+  if (s <= old_size) {
+    // either below the minimum block size,
+    // or not enough smaller to move down a block size
+    return true;
+  }
+
+  // Check if we have a chain of free right
+  // sisters long enough to expand this block.
+  if(i&1) { // if i is not odd, it has no right sister
+    let k = i;
+    let new_size = old_size << 1;
+    do { 
+      // Break if the right sister is not free
+      if (getf(table, k + 1) > 0) { break; }
+      const p = prnt(k);
+      // If merging this sister makes a big enough block...
+      if (s <= new_size) {
+        clra(table, k); // free the current block
+        seta(table, p); // allocate the aligned parent block
+        return true;
+      }
+      new_size = new_size << 1;
+      k = p;
+    } while(k&1);
+  }
+
+  return false;
 }
 
 export class BuddyAllocator {
@@ -149,7 +184,7 @@ export class BuddyAllocator {
     seta(table, p);
   }
 
-  alloc(n: number) {
+  alloc(n: number): number {
     const { minblock } = this;
     const level = Math.ceil(Math.log2(Math.ceil(n / minblock)));
     const tree_level = this.max_level - level - 1;
@@ -173,6 +208,8 @@ export class BuddyAllocator {
   }
 
   free(n: number) {
+    // Don't allow freeing the metadata table!
+    if (n === 0) { throw new Error("Cannot free null."); }
     const { table } = this;
     const i = this.table_index(n);
     clra(table, i);
@@ -190,39 +227,9 @@ export class BuddyAllocator {
   realloc(n: number, s: number) {
     const { table, minblock, max_level } = this;
     const i = this.table_index(n);
-    let old_size = (1 << (max_level - (Math.log2(i)|0))) * minblock;
-    if (s < old_size/2 && s > minblock) {
-      // toggle this block from self-allocated to child-allocated
-      togf(table, i);
-      // allocate the aligned left child
-      seta(table, left(i));
+    const old_size = (1 << (max_level - (Math.log2(i)|0))) * minblock;
+    if(resize_block(i, old_size, s, minblock, table)) {
       return n;
-    }
-    
-    if (s <= old_size) {
-      // either below the minimum block size,
-      // or not enough smaller to move down a block size
-      return n;
-    }
-
-    // Check if we have a chain of free right
-    // sisters long enough to expand this block.
-    if(i&1) { // if i is not odd, it has no right sister
-      let k = i;
-      let new_size = old_size << 1;
-      do { 
-        // Break if the right sister is not free
-        if (getf(table, k + 1) > 0) { break; }
-        const p = prnt(k);
-        // If merging this sister makes a big enough block...
-        if (s <= new_size) {
-          clra(table, k); // free the current block
-          seta(table, p); // allocate the aligned parent block
-          return n;
-        }
-        new_size = new_size << 1;
-        k = p;
-      } while(k&1);
     }
 
     // Allocate a new larger block and move data there.
