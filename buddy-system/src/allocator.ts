@@ -103,17 +103,21 @@ export function merge(i: number, table: Uint8Array) {
 }
 
 export function resize_block(i: number, old_size: number, s: number, minblock: number, table: Uint8Array) {
-  if (s < old_size/2 && s > minblock) {
-    // toggle this block from self-allocated to child-allocated
-    togf(table, i);
-    // allocate the aligned left child
-    seta(table, left(i));
+  let new_size = old_size >> 1;
+  if (s <= new_size && new_size >= minblock) {
+    do {
+      // toggle this block from self-allocated to child-allocated
+      togf(table, i);
+      // allocate the aligned left child
+      i = left(i);
+      seta(table, i);
+      new_size = new_size >> 1;
+    } while(s <= new_size && new_size >= minblock);
     return true;
   }
   
   if (s <= old_size) {
-    // either below the minimum block size,
-    // or not enough smaller to move down a block size
+    // not enough smaller to move down a block size
     return true;
   }
 
@@ -121,15 +125,18 @@ export function resize_block(i: number, old_size: number, s: number, minblock: n
   // sisters long enough to expand this block.
   if(i&1) { // if i is not odd, it has no right sister
     let k = i;
-    let new_size = old_size << 1;
+    new_size = old_size << 1;
     do { 
       // Break if the right sister is not free
       if (getf(table, k + 1) > 0) { break; }
       const p = prnt(k);
       // If merging this sister makes a big enough block...
       if (s <= new_size) {
-        clra(table, k); // free the current block
-        seta(table, p); // allocate the aligned parent block
+        togf(table, p); // allocate the aligned parent block
+        do { // free all left children
+          clra(table, k);
+          k = left(k);
+        } while(k <= i);
         return true;
       }
       new_size = new_size << 1;
