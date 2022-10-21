@@ -34,8 +34,5 @@
     "ts-node": "^9.1.1",
     "typescript": "^3.9.7"
   },
-  "types": "./bin/index.d.ts",
-  "directories": {
-    "test": "test"
-  }
+  "types": "./bin/index.d.ts"
 }

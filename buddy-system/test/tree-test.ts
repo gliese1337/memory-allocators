@@ -199,7 +199,7 @@ describe("Tree Manipulation Tests", () => {
     const tab = s2u(["00010100","01010000","01010100","00000000","10101010","00000000","00000000","00000000"]);
     const res = s2u(["00010100","01000000","01010000","00000000","10101010","00000000","00000000","00000000"]);
     //console.log(tree2sexpr(tab, 64));
-    merge(20, tab)
+    merge(20, tab);
     //console.log(tree2sexpr(tab, 64));
     expect(tab).to.eql(res);
   });

@@ -4,22 +4,11 @@ import {
 
 export class BuddyAllocator {
   public readonly memory: ArrayBuffer;
+  // The table is a prefix of memory 
+  // which holds the metadata tree.
   private table: Uint8Array;
   private minblock: number;
   private max_level: number;
-
-  /*
-  The table is a prefix of total memory which stores allocation metadata.
-  It is arranged as an implicit full binary tree, where each node's children
-  are at index 2k+1 and 2k+2, and a node's parent is at floor((k-1)/2).
-  Each level of the tree corresponds to a set of blocks of equal size,
-  where sister nodes are "buddies".
-  Metadata is 2 bits per block (so 4 blocks per byte), as follows:
-    - 00: Completely unallocated
-    - 10: Allocated as a single block
-    - 01: At least one child block is separately allocated
-          (I.e., this block has been split.)
-  */
 
   constructor(minblock: number, size: number) {
     minblock = nextPow2(minblock);

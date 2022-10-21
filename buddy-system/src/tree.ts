@@ -1,50 +1,66 @@
-import { getf, seta, togf, clra, clrc } from "./bits";
+import { getf, seta, togf, clra, clrc, setc } from "./bits";
+
+/*
+  Allocation metadata is stored as an array-backed implicit full
+  binary tree in a prefix of the total memory, where each node
+  is 2 bits long. The fist two bits are reserved so that the root
+  of the tree occurs at index 1, which simplifies parent-child
+  relations and ensures that sister nodes are always in the same
+  byte, aligned on nybbles. Child nodes of a node k are located
+  at indices 2k and 2k+1, and a node's parent is at floor(k/2).
+  Each level of the tree corresponds to a set of blocks of equal
+  size, where sister nodes are "buddies". Each two bit node
+  stores the state of one block, encoded as follows:
+    - 00: Unallocated
+    - 10: Allocated as a single block
+    - 01: At least one child block is separately allocated
+          (I.e., this block has been split.)
+    - 11: Invalid state
+*/
 
 export function nextPow2(n: number) {
   return 1 << Math.ceil(Math.log2(n));
 }
 
 export function alloc_level(tree_level: number, block_size: number, table: Uint8Array) {
-  // level 0 -- the root -- only has a single block, which is always allocated
-  if (tree_level < 1) { throw new Error("Out of Memory"); }
+  let pi: number;
+  let level = tree_level;
+  let llen = 1 << (level + 1);
+  scan: for (;;level--) {
+    // level 0 -- the root -- only has a single block, which is always split
+    if (level < 1) { throw new Error("Out of Memory"); }
 
-  // Check for free blocks on this level whose
-  // sisters are allocated and use them first.
-  const llen = 1 << tree_level;
-  const lend = llen << 1;
-  for (let l = llen; l < lend; l+=2) {
-    // Read all 4 bits of a buddy pair at once.
-    const b = (table[l>>2] >> (4 - ((l&2) << 1))) & 0xf;
-    // Because a sister has already been allocated in each of
-    // these cases, we do not need to update the parent metadata.
-    if (b < 4 && b > 0) {
-      seta(table, l); // allocate the left sister
-      return block_size * (l - llen);
+    // Check for free blocks on this
+    // level whose sisters are non-free.
+    const lend = llen;
+    llen = llen >> 1;
+    for (let l = llen; l < lend; l+=2) {
+      // Read all 4 bits of a buddy pair at once.
+      const b = (table[l>>2] >> (4 - ((l&2) << 1))) & 0xf;
+      // If b has exactly one on bit, then one block
+      // is allocated or split, and the other is free.
+      if(b && !(b & (b - 1))) {
+        // If b = 1 or 2, the left block is free.
+        // If b = 4 or 8, the right block is free.
+        pi = +(b >= 4) + l;
+        break scan;
+      }
     }
-    if (b > 3 && (b&0x3) === 0) {
-      const r = l + 1;
-      seta(table, r); // allocate the right sister
-      return block_size * (r - llen);
-    }
+
+    // If we couldn't find any sister blocks
+    // to return, split a block one level up.
+    block_size = block_size << 1;
   }
 
-  // If we couldn't find any sister blocks to return,
-  // allocate a block one level up to split.
-  const nblok_size = block_size << 1;
-  const p: number = alloc_level(tree_level - 1, nblok_size, table);
+  const p = block_size * (pi - llen);
+  for (;level < tree_level; level++) {
+    setc(table, pi); // Split this block
+    pi = pi << 1; // Look at the aligned left child block.
+  }
   
-  // Convert pointer back to a table index.
-  // Find the start index of the parent level
-  // and add the block index within that level.
-  const block_index = p / nblok_size;
-  const pi = (llen >> 1) + block_index;
-  
-  // Toggle bits to indicate this block was not actually allocated,
-  // but its left child (which is aligned on p) was allocated.
-  togf(table, pi);
-
-  // Allocate the aligned left child block
-  seta(table, pi << 1);
+  // Actually allocate the leftmost block
+  // at the level that was originally requested.
+  seta(table, pi);
 
   return p;
 }
