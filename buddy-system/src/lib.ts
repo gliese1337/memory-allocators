@@ -1,40 +1,7 @@
+import { getf, seta, togf, clra, clrc } from "./bits";
+
 export function nextPow2(n: number) {
   return 1 << Math.ceil(Math.log2(n));
-}
-
-// Get a two-bit field at index i
-export function getf(m: Uint8Array, i: number) {
-  return (m[i>>2] >> (6 - ((i&3) << 1))) & 3;
-}
-
-// Toggle bits of field at index i
-export function togf(m: Uint8Array, i: number) {
-  const b = i >> 2;
-  m[b] = (m[b] ^ (0xC0 >> ((i&3) << 1)));
-}
-
-// Set the block allocation bit of field i
-export function seta(m: Uint8Array, i: number) {
-  const b = i >> 2;
-  m[b] = (m[b] | (0x80 >> ((i&3) << 1)));
-}
-
-// Clear the block allocation bit of field i
-export function clra(m: Uint8Array, i: number) {
-  const b = i >> 2;
-  m[b] = (m[b] & ~(0x80 >> ((i&3) << 1)));
-}
-
-// Set the child allocation bit of field i
-export function setc(m: Uint8Array, i: number) {
-  const b = i >> 2;
-  m[b] = (m[b] | (0x40 >> ((i&3) << 1)));
-}
-
-// Clear the child allocation bit of field i
-export function clrc(m: Uint8Array, i: number) {
-  const b = i >> 2;
-  m[b] = (m[b] & ~(0x40 >> ((i&3) << 1)));
 }
 
 // Get the sibling index
@@ -145,4 +112,19 @@ export function resize_block(i: number, old_size: number, s: number, minblock: n
   }
 
   return false;
+}
+
+export function table_index(n: number, minblock: number, max_level: number, table: Uint8Array) {
+  if (n % minblock) {
+    throw new Error("Unaligned pointer");
+  }
+  // Start at the smallest aligned block, and
+  // move up levels until we find the index
+  // at which a block is actually allocated.
+  const block_index = n / minblock;
+  let i = (1 << max_level) + block_index - 1;
+  for (;i > 0; i = prnt(i)) {
+    if (getf(table, i) === 2) { return i; }
+  }
+  throw new Error("Unknown pointer");
 }

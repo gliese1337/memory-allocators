@@ -1,8 +1,5 @@
 import {
-  nextPow2,
-  getf, setc, seta, clra,
-  left, prnt, sstr,
-  alloc_level, merge, resize_block,
+  nextPow2, alloc_level, merge, resize_block, table_index,
 } from "./lib";
 
 export class BuddyAllocator {
@@ -38,15 +35,7 @@ export class BuddyAllocator {
     this.table = table;
 
     // Initialize the allocation table by allocating itself.
-    // Reserve the left-most block that's large enough to hold the table.
-    const reserve_level_depth = Math.ceil(Math.log2(reserve/minblock)) - 1;
-    let p = 0;
-    for (let i = 0; i < reserve_level_depth; i++) {
-      setc(table, p); // Indicate that the block is split
-      p = left(p); 
-    }
-    // Allocate the table itself
-    seta(table, p);
+   this.alloc(reserve);
   }
 
   alloc(n: number): number {
@@ -56,46 +45,35 @@ export class BuddyAllocator {
     return alloc_level(tree_level, minblock * (1 << level), this.table); 
   }
 
-  private table_index(n: number) {
-    const { table, minblock } = this;
-    if (n % minblock) {
-      throw new Error("Unaligned pointer");
-    }
-    // Start at the smallest aligned block, and
-    // move up levels until we find the index
-    // at which a block is actually allocated.
-    const block_index = n / minblock;
-    let i = 1 << this.max_level + block_index - 1;
-    for (;i > 0; i = prnt(i)) {
-      if (getf(table, i) === 2) { return i; }
-    }
-    throw new Error("Unknown pointer");
-  }
-
   free(n: number) {
     // Don't allow freeing the metadata table!
     if (n === 0) { throw new Error("Cannot free null."); }
-    const { table } = this;
-    const i = this.table_index(n);
+    const { minblock, max_level, table } = this;
+    const i = table_index(n, minblock, max_level, table);
     merge(i, table);
   }
 
   alloc_size(n: number) {
-    const { minblock, max_level } = this;
-    const i = this.table_index(n);
+    const { minblock, max_level, table } = this;
+    const i = table_index(n, minblock, max_level, table);
     return (1 << (max_level - (Math.log2(i)|0))) * minblock;
   }
 
   realloc(n: number, s: number) {
-    const { table, minblock, max_level } = this;
-    const i = this.table_index(n);
+    // Don't allow altering the metadata table!
+    if (n === 0) { throw new Error("Cannot free null."); }
+    const { minblock, max_level, table } = this;
+    const i = table_index(n, minblock, max_level, table);
     const old_size = (1 << (max_level - (Math.log2(i)|0))) * minblock;
     if(resize_block(i, old_size, s, minblock, table)) {
       return n;
     }
 
     // Allocate a new larger block and move data there.
-    this.free(n);
+    // Free the current block first in case it can be incorporated
+    // on the right. Block tree structure ensures that source
+    // and destination ranges can never overlap.
+    merge(i, table);
     const p = this.alloc(s);
     const end = n + old_size;
     for (let w = p; n < end; n++, w++) {
