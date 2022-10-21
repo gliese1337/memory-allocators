@@ -4,14 +4,6 @@ export function nextPow2(n: number) {
   return 1 << Math.ceil(Math.log2(n));
 }
 
-/*
-                       1
-           2                      3
-     4          5           6           7
-  8     9    10    11    12    13    14    15
-16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
-*/
-
 export function alloc_level(tree_level: number, block_size: number, table: Uint8Array) {
   // level 0 -- the root -- only has a single block, which is always allocated
   if (tree_level < 1) { throw new Error("Out of Memory"); }
@@ -21,16 +13,16 @@ export function alloc_level(tree_level: number, block_size: number, table: Uint8
   const llen = 1 << tree_level;
   const lend = llen << 1;
   for (let l = llen; l < lend; l+=2) {
-    const r = l + 1;
-    const lbits = getf(table, l);
-    const rbits = getf(table, r);
+    // Read all 4 bits of a buddy pair at once.
+    const b = (table[l>>2] >> (4 - ((l&2) << 1))) & 0xf;
     // Because a sister has already been allocated in each of
     // these cases, we do not need to update the parent metadata.
-    if (lbits === 0 && rbits !== 0) {
+    if (b < 4 && b > 0) {
       seta(table, l); // allocate the left sister
       return block_size * (l - llen);
     }
-    if (lbits !== 0 && rbits === 0) {
+    if (b > 3 && (b&0x3) === 0) {
+      const r = l + 1;
       seta(table, r); // allocate the right sister
       return block_size * (r - llen);
     }

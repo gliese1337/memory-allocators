@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import { 
   nextPow2,
   alloc_level, merge, resize_block, table_index,
-} from '../src/lib';
+} from '../src/tree';
 
 function s2u(a: string[]) {
   return new Uint8Array(a.map(a => parseInt(a, 2)));

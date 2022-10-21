@@ -1,6 +1,6 @@
 import {
   nextPow2, alloc_level, merge, resize_block, table_index,
-} from "./lib";
+} from "./tree";
 
 export class BuddyAllocator {
   public readonly memory: ArrayBuffer;
