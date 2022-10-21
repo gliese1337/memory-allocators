@@ -4,14 +4,13 @@ export function nextPow2(n: number) {
   return 1 << Math.ceil(Math.log2(n));
 }
 
-// Get the sibling index
-export function sstr(i: number) { return i+(i&1?1:-1); }
-
-// Get the parent index
-export function prnt(i: number) { return (i - 1) >> 1; }
-
-// Get the left child index
-export function left(i: number) { return (i << 1) + 1; }
+/*
+                       1
+           2                      3
+     4          5           6           7
+  8     9    10    11    12    13    14    15
+16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
+*/
 
 export function alloc_level(tree_level: number, block_size: number, table: Uint8Array) {
   // level 0 -- the root -- only has a single block, which is always allocated
@@ -20,8 +19,8 @@ export function alloc_level(tree_level: number, block_size: number, table: Uint8
   // Check for free blocks on this level whose
   // sisters are allocated and use them first.
   const llen = 1 << tree_level;
-  const lend = (llen << 1) - 1;
-  for (let l = llen - 1; l < lend; l+=2) {
+  const lend = llen << 1;
+  for (let l = llen; l < lend; l+=2) {
     const r = l + 1;
     const lbits = getf(table, l);
     const rbits = getf(table, r);
@@ -29,11 +28,11 @@ export function alloc_level(tree_level: number, block_size: number, table: Uint8
     // these cases, we do not need to update the parent metadata.
     if (lbits === 0 && rbits !== 0) {
       seta(table, l); // allocate the left sister
-      return block_size * (l - llen + 1);
+      return block_size * (l - llen);
     }
     if (lbits !== 0 && rbits === 0) {
       seta(table, r); // allocate the right sister
-      return block_size * (r - llen + 1);
+      return block_size * (r - llen);
     }
   }
 
@@ -46,14 +45,14 @@ export function alloc_level(tree_level: number, block_size: number, table: Uint8
   // Find the start index of the parent level
   // and add the block index within that level.
   const block_index = p / nblok_size;
-  const pi = ((llen >> 1) - 1) + block_index;
+  const pi = (llen >> 1) + block_index;
   
   // Toggle bits to indicate this block was not actually allocated,
   // but its left child (which is aligned on p) was allocated.
   togf(table, pi);
 
   // Allocate the aligned left child block
-  seta(table, left(pi));
+  seta(table, pi << 1);
 
   return p;
 }
@@ -62,8 +61,8 @@ export function merge(i: number, table: Uint8Array) {
   clra(table, i); // free this block
   // while the sister is free,
   // free the parent, then check *its* sister.
-  while (getf(table, sstr(i)) === 0) {
-    i = prnt(i);
+  while (getf(table, i^1 /* sister node */) === 0) {
+    i = i >> 1; // parent node
     if (i === 0) return;
     clrc(table, i); // turn off 'allocated child' bit
   }
@@ -76,7 +75,7 @@ export function resize_block(i: number, old_size: number, s: number, minblock: n
       // toggle this block from self-allocated to child-allocated
       togf(table, i);
       // allocate the aligned left child
-      i = left(i);
+      i = i << 1;
       seta(table, i);
       new_size = new_size >> 1;
     } while(s <= new_size && new_size >= minblock);
@@ -90,25 +89,25 @@ export function resize_block(i: number, old_size: number, s: number, minblock: n
 
   // Check if we have a chain of free right
   // sisters long enough to expand this block.
-  if(i&1) { // if i is not odd, it has no right sister
+  if((i&1) === 0) { // if i is not even, it has no right sister
     let k = i;
     new_size = old_size << 1;
     do { 
       // Break if the right sister is not free
       if (getf(table, k + 1) > 0) { break; }
-      const p = prnt(k);
+      const p = k >> 1; // get k's parent
       // If merging this sister makes a big enough block...
       if (s <= new_size) {
         togf(table, p); // allocate the aligned parent block
         do { // free all left children
           clra(table, k);
-          k = left(k);
+          k = k << 1;
         } while(k <= i);
         return true;
       }
       new_size = new_size << 1;
       k = p;
-    } while(k&1);
+    } while((k&1) === 0);
   }
 
   return false;
@@ -122,8 +121,8 @@ export function table_index(n: number, minblock: number, max_level: number, tabl
   // move up levels until we find the index
   // at which a block is actually allocated.
   const block_index = n / minblock;
-  let i = (1 << max_level) + block_index - 1;
-  for (;i > 0; i = prnt(i)) {
+  let i = (1 << max_level) + block_index;
+  for (;i > 0; i = i >> 1) {
     if (getf(table, i) === 2) { return i; }
   }
   throw new Error("Unknown pointer");
