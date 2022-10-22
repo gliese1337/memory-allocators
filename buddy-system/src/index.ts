@@ -8,6 +8,7 @@ export class BuddyAllocator {
   // The table is a prefix of memory 
   // which holds the metadata tree.
   private table: Uint8Array;
+  private view: DataView;
   private max_level: number;
   private reserve: number;
 
@@ -18,11 +19,12 @@ export class BuddyAllocator {
     const reserve = Math.max(leaves / 2, minblock);
     const memory = new ArrayBuffer(size);
     const table = new Uint8Array(memory, 0, reserve);
-    
+
     this.reserve = reserve;
     this.max_level = Math.log2(leaves); // pre-processing ensures this is always an integer.
     this.memory = memory;
     this.table = table;
+    this.view = new DataView(memory);
 
     // Initialize the allocation table by allocating itself.
     let i = 1;
@@ -67,13 +69,21 @@ export class BuddyAllocator {
 
     // Allocate a new larger block and move data there.
     // Free the current block first in case it can be incorporated
-    // on the right. Block tree structure ensures that source
-    // and destination ranges can never overlap.
+    // on the right. This is only safe if reallocation is atomic.
+    // Block tree structure ensures that source and destination
+    // ranges can never overlap, so it is safe in both directions.
     merge(i, table);
     const p = this.alloc(s);
     const end = n + old_size;
-    for (let w = p; n < end; n++, w++) {
-      table[w] = table[n];
+    const { view } = this;
+    if (old_size <= 4) {
+      for (let w = p; n < end; n++, w++) {
+        view.setUint8(w, view.getUint8(n));
+      }
+    } else {
+      for (let w = p; n < end; n+=4, w+=4) {
+        view.setUint32(w, view.getUint32(n));
+      }
     }
     return p;
   }
