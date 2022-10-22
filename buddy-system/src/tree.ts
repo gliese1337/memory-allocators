@@ -36,7 +36,8 @@ export function alloc_level(tree_level: number, block_size: number, table: Uint8
     llen = llen >> 1;
     for (let l = llen; l < lend; l+=2) {
       // Read all 4 bits of a buddy pair at once.
-      const b = (table[l>>2] >> (4 - ((l&2) << 1))) & 0xf;
+      // (2^l&2) << 1 = 0 if l&2 = 1 or 4 if l&2 = 0
+      const b = (table[l>>2] >> ((2^l&2) << 1)) & 0xf;
       // If b has exactly one on bit, then one block
       // is allocated or split, and the other is free.
       if(b && !(b & (b - 1))) {
@@ -80,7 +81,7 @@ export function resize_block(i: number, old_size: number, s: number, minblock: n
   let new_size = old_size >> 1;
   if (s <= new_size && new_size >= minblock) {
     do {
-      // toggle this block from self-allocated to child-allocated
+      // toggle this block from allocated to split
       togf(table, i);
       // allocate the aligned left child
       i = i << 1;
