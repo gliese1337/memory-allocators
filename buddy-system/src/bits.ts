@@ -1,6 +1,6 @@
 // Get a two-bit field at index i
 export function getf(m: Uint8Array, i: number) {
-  return (m[i>>2] >> (6 - ((i&3) << 1))) & 3;
+  return (m[i>>2] >> ((3^i&3) << 1)) & 3;
 }
 
 // Toggle bits of field at index i
