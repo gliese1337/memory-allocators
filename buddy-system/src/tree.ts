@@ -133,6 +133,9 @@ export function table_index(n: number, minblock: number, max_level: number, tabl
   let i = (1 << max_level) + block_index;
   for (;i > 0; i = i >> 1) {
     if (getf(table, i) === 2) { return i; }
+    // If we hit a right child, the parent
+    // node will no longer be aligned.
+    if (i&1) { break; }
   }
   throw new Error("Unknown pointer");
 }

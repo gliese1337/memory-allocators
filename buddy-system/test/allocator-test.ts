@@ -146,6 +146,26 @@ describe("Deallocation Tests", () => {
     expect(ba.alloc(6)).to.eql(32);
     expect(ba.alloc(7)).to.eql(40);
   });
+
+  it("should fail to free unallocated and unaligned memory", () => {
+    const ba = new BuddyAllocator(4, 256);
+    expect(ba.alloc_size(0)).to.eql(32);
+    expect(ba.alloc(10)).to.eql(32);
+    expect(() => ba.free(0)).to.throw("Invalid pointer");
+    expect(() => ba.free(16)).to.throw("Invalid pointer");
+    expect(() => ba.free(34)).to.throw("Unaligned pointer");
+    expect(() => ba.free(40)).to.throw("Unknown pointer");
+    expect(() => ba.free(64)).to.throw("Unknown pointer");
+  });
+
+  it("should fail to double-free", () => {
+    const ba = new BuddyAllocator(4, 256);
+    expect(ba.alloc_size(0)).to.eql(32);
+    expect(ba.alloc(4)).to.eql(32);
+    expect(ba.alloc(4)).to.eql(36);
+    ba.free(32);
+    expect(() => ba.free(32)).to.throw("Unknown pointer");
+  });
 });
 
 describe("Reallocation Tests", () => {
@@ -195,5 +215,16 @@ describe("Reallocation Tests", () => {
     expect(m[48]).to.eql(0xCC);
     expect(ba.alloc(10)).to.eql(64);
     expect(ba.alloc(5)).to.eql(40);
+  });
+
+  it("should fail to realloc unallocated and unaligned memory", () => {
+    const ba = new BuddyAllocator(4, 256);
+    expect(ba.alloc_size(0)).to.eql(32);
+    expect(ba.alloc(10)).to.eql(32);
+    expect(() => ba.realloc(0, 4)).to.throw("Invalid pointer");
+    expect(() => ba.realloc(16, 4)).to.throw("Invalid pointer");
+    expect(() => ba.realloc(34, 4)).to.throw("Unaligned pointer");
+    expect(() => ba.realloc(40, 4)).to.throw("Unknown pointer");
+    expect(() => ba.realloc(64, 4)).to.throw("Unknown pointer");
   });
 });
