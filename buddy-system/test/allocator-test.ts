@@ -59,6 +59,21 @@ describe("Basic Allocation Tests", () => {
     expect(ba.alloc(60)).to.eql(192);
   });
 
+  it("should allocate all memory", () => {
+    const ba = new BuddyAllocator(4, 256);
+    expect(ba.alloc_size(0)).to.eql(32);
+    expect(ba.alloc(32)).to.eql(32);
+    expect(ba.alloc(64)).to.eql(64);
+    expect(ba.alloc(128)).to.eql(128);
+    expect(() => ba.alloc(4)).to.throw("Out of Memory");
+  });
+
+  it("should fail to allocate an oversize block", () => {
+    const ba = new BuddyAllocator(4, 256);
+    expect(ba.alloc_size(0)).to.eql(32);
+    expect(() => ba.alloc(129)).to.throw("Out of Memory");
+  });
+
   it("should initialize 256 bytes of memory with 8-byte blocks", () => {
     const ba = new BuddyAllocator(8, 256);
     expect(ba.alloc_size(0)).to.eql(16);
